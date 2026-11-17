@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>A Caixa de Sapatos do Arquivista 📦</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg-1: #eef2ff;
+    --bg-2: #faf5ff;
+    --bg-3: #ecfeff;
+  }
+  html, body { -webkit-tap-highlight-color: transparent; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, var(--bg-3), transparent 60%),
+      radial-gradient(1000px 500px at 110% 10%, var(--bg-2), transparent 55%),
+      linear-gradient(180deg, var(--bg-1), #f8fafc 60%, #f8fafc);
+    min-height: 100vh;
+    font-family: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    touch-action: manipulation;
+  }
+
+  /* ===== Cartões soltos ===== */
+  .item-card {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    cursor: grab;
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease, background-color .18s ease;
+    will-change: transform;
+  }
+  .item-card:hover { transform: translateY(-3px) rotate(-1deg); box-shadow: 0 12px 25px -8px rgba(0,0,0,.18); }
+  .item-card:active { cursor: grabbing; }
+  .item-card.dragging {
+    position: fixed !important;
+    z-index: 1000;
+    cursor: grabbing;
+    transition: none;
+    transform: scale(1.08) rotate(-3deg);
+    box-shadow: 0 25px 45px -10px rgba(0,0,0,.35);
+    pointer-events: none;
+  }
+
+  /* ===== Caixas de destino ===== */
+  .drop-zone {
+    transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease;
+  }
+  .drop-zone.hover {
+    transform: translateY(-4px) scale(1.015);
+    box-shadow: 0 20px 35px -12px rgba(0,0,0,.22);
+  }
+  .drop-zone .drop-hint { transition: opacity .2s ease; }
+
+  /* Cartão dentro da caixa (acertou) */
+  .item-card.locked {
+    cursor: default;
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
+    border-color: #6ee7b7 !important;
+    color: #065f46 !important;
+    animation: pop-in .35s cubic-bezier(.34,1.56,.64,1);
+    box-shadow: 0 6px 14px -6px rgba(16,185,129,.4);
+  }
+  .item-card.locked:hover { transform: none; }
+
+  /* Animações */
+  @keyframes pop-in {
+    0%   { transform: scale(.6) rotate(-8deg); opacity: 0; }
+    60%  { transform: scale(1.12) rotate(2deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-9px) rotate(-2deg); }
+    40% { transform: translateX(9px) rotate(2deg); }
+    60% { transform: translateX(-7px) rotate(-1deg); }
+    80% { transform: translateX(7px) rotate(1deg); }
+  }
+  .shake { animation: shake .45s ease; }
+
+  @keyframes float-bob {
+    0%,100% { transform: translateY(0) rotate(var(--rot, 0deg)); }
+    50% { transform: translateY(-6px) rotate(var(--rot, 0deg)); }
+  }
+  .float-bob { animation: float-bob 3.5s ease-in-out infinite; }
+
+  /* ===== Modal de conclusão ===== */
+  .modal-backdrop { backdrop-filter: blur(6px); }
+  @keyframes modal-in {
+    from { transform: scale(.7) translateY(20px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  .modal-card { animation: modal-in .5s cubic-bezier(.34,1.56,.64,1); }
+
+  /* Confete */
+  .confetti {
+    position: fixed;
+    top: -20px;
+    width: 10px; height: 14px;
+    z-index: 1100;
+    border-radius: 2px;
+    pointer-events: none;
+    animation: confetti-fall linear forwards;
+  }
+  @keyframes confetti-fall {
+    0%   { transform: translateY(0) rotate(0); opacity: 1; }
+    100% { transform: translateY(105vh) rotate(720deg); opacity: .9; }
+  }
+
+  /* Botão jogar de novo */
+  .btn-primary {
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 25px -8px rgba(99,102,241,.6); }
+  .btn-primary:active { transform: translateY(0); }
+
+  /* Caixa cheia (feedback sutil) */
+  .drop-zone.full .drop-hint { opacity: 0; }
+
+  /* Scrollbar discreta */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 8px; }
+</style>
+</head>
+<body class="text-slate-800">
+
+  <!-- ===== Header ===== -->
+  <header class="max-w-6xl mx-auto px-4 pt-6 sm:pt-10 pb-4">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <div class="text-4xl sm:text-5xl">📦</div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-indigo-900">
+            A Caixa de Sapatos do Arquivista
+          </h1>
+          <p class="text-sm sm:text-base text-slate-500 font-medium">
+            Organize a bagunça: cada dado tem sua própria caixa. 🗂️
+          </p>
+        </div>
+      </div>
+
+      <!-- Progresso -->
+      <div class="bg-white/80 backdrop-blur rounded-2xl px-4 py-2 shadow-sm border border-indigo-100 min-w-[180px]">
+        <div class="flex items-center justify-between text-xs font-bold text-indigo-900 mb-1">
+          <span>Itens organizados</span>
+          <span><span id="progressCount">0</span>/20</span>
+        </div>
+        <div class="w-full h-2 bg-indigo-100 rounded-full overflow-hidden">
+          <div id="progressBar" class="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 rounded-full transition-all duration-500" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Área "A Bagunça" ===== -->
+  <section class="max-w-6xl mx-auto px-4 mt-2">
+    <div class="bg-white/70 backdrop-blur rounded-3xl border border-indigo-100 shadow-lg p-4 sm:p-6">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xl">🌀</span>
+        <h2 class="font-bold text-slate-700">A Bagunça</h2>
+        <span class="text-xs text-slate-400 font-medium">— arraste cada cartão para a caixa certa</span>
+      </div>
+      <div id="messArea" class="flex flex-wrap gap-2.5 sm:gap-3 min-h-[160px] items-center">
+        <!-- cartões injetados via JS -->
+      </div>
+      <p id="messEmpty" class="hidden text-center text-emerald-600 font-semibold py-4">
+        ✨ Tudo no lugar! Boa!
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== Caixas de destino ===== -->
+  <section class="max-w-6xl mx-auto px-4 mt-6 mb-12">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+      <!-- Caixa 1: Textos -->
+      <div class="drop-zone rounded-3xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 p-4 min-h-[220px] flex flex-col"
+           data-category="text">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-2xl">📝</span>
+          <div>
+            <h3 class="font-bold text-indigo-800 text-sm leading-tight">Textos e Nomes</h3>
+            <p class="text-[11px] text-indigo-400 font-medium">Frases e letras</p>
+          </div>
+        </div>
+        <div class="drop-content flex flex-wrap gap-2 flex-1 content-start"></div>
+        <p class="drop-hint text-[11px] text-indigo-300 font-medium text-center mt-2">solte aqui 📥</p>
+      </div>
+
+      <!-- Caixa 2: Inteiros -->
+      <div class="drop-zone rounded-3xl border-2 border-dashed border-sky-300 bg-sky-50/60 p-4 min-h-[220px] flex flex-col"
+           data-category="integer">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-2xl">🔢</span>
+          <div>
+            <h3 class="font-bold text-sky-800 text-sm leading-tight">Números Inteiros</h3>
+            <p class="text-[11px] text-sky-400 font-medium">Contagens exatas</p>
+          </div>
+        </div>
+        <div class="drop-content flex flex-wrap gap-2 flex-1 content-start"></div>
+        <p class="drop-hint text-[11px] text-sky-300 font-medium text-center mt-2">solte aqui 📥</p>
+      </div>
+
+      <!-- Caixa 3: Decimais -->
+      <div class="drop-zone rounded-3xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 p-4 min-h-[220px] flex flex-col"
+           data-category="decimal">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-2xl">💰</span>
+          <div>
+            <h3 class="font-bold text-emerald-800 text-sm leading-tight">Valores Monetários / Decimais</h3>
+            <p class="text-[11px] text-emerald-500 font-medium">Dinheiro e quebrados</p>
+          </div>
+        </div>
+        <div class="drop-content flex flex-wrap gap-2 flex-1 content-start"></div>
+        <p class="drop-hint text-[11px] text-emerald-300 font-medium text-center mt-2">solte aqui 📥</p>
+      </div>
+
+      <!-- Caixa 4: Booleanos -->
+      <div class="drop-zone rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/60 p-4 min-h-[220px] flex flex-col"
+           data-category="boolean">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-2xl">✅</span>
+          <div>
+            <h3 class="font-bold text-amber-800 text-sm leading-tight">Estados</h3>
+            <p class="text-[11px] text-amber-500 font-medium">Sim ou Não / Verdadeiro ou Falso</p>
+          </div>
+        </div>
+        <div class="drop-content flex flex-wrap gap-2 flex-1 content-start"></div>
+        <p class="drop-hint text-[11px] text-amber-300 font-medium text-center mt-2">solte aqui 📥</p>
+      </div>
+
+    </div>
+
+    <!-- Dica de ajuda -->
+    <div class="mt-6 text-center text-xs text-slate-400">
+      💡 Dica: <span class="font-semibold text-slate-500">textos</span> têm aspas,
+      <span class="font-semibold text-slate-500">inteiros</span> não têm ponto,
+      <span class="font-semibold text-slate-500">decimais</span> têm vírgula/ponto,
+      <span class="font-semibold text-slate-500">estados</span> são só Sim ou Não.
+    </div>
+  </section>
+
+  <!-- ===== Modal de conclusão ===== -->
+  <div id="modal" class="hidden fixed inset-0 z-[1050] flex items-center justify-center p-4 modal-backdrop bg-slate-900/40">
+    <div class="modal-card relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-7 sm:p-9 text-center">
+      <div class="text-6xl mb-3">🎉</div>
+      <h2 class="text-2xl sm:text-3xl font-extrabold text-indigo-900 mb-2">Parabéns!</h2>
+      <p class="text-slate-600 leading-relaxed mb-5">
+        Você organizou a bagunça! 🧹✨ No fundo, os computadores e bancos de dados exigem
+        essa <span class="font-bold text-indigo-700">mesma separação exata</span> para não darem erro!
+      </p>
+      <div class="bg-indigo-50 rounded-2xl p-3 mb-5 text-sm text-slate-600">
+        <span class="font-bold text-indigo-800">Resumo da sua organização:</span><br>
+        📝 8 textos · 🔢 6 inteiros · 💰 4 decimais · ✅ 2 estados
+      </div>
+      <button id="restartBtn" class="btn-primary w-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold py-3 rounded-2xl shadow-lg">
+        Jogar de novo 🔁
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast de erro -->
+  <div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-6 z-[1060] bg-rose-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg opacity-0 pointer-events-none transition-opacity duration-300">
+    ❌ Esse item não pertence a esta caixa!
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ===== Definição dos itens =====
+  const ITEMS = [
+    { id: 1,  label: "Maria da Silva",        category: "text" },
+    { id: 2,  label: "25",                    category: "integer" },
+    { id: 3,  label: "45.90",                 category: "decimal" },
+    { id: 4,  label: "Rua dos Bobos, 0",      category: "text" },
+    { id: 5,  label: "10",                    category: "integer" },
+    { id: 6,  label: "150.00",                category: "decimal" },
+    { id: 7,  label: "True (Verdadeiro)",     category: "boolean" },
+    { id: 8,  label: "São Paulo",             category: "text" },
+    { id: 9,  label: "2",                     category: "integer" },
+    { id: 10, label: "False (Falso)",         category: "boolean" },
+    { id: 11, label: "João Pereira",          category: "text" },
+    { id: 12, label: "100",                  category: "integer" },
+    { id: 13, label: "9.99",                  category: "decimal" },
+    { id: 14, label: "Av. Brasil, 1024",      category: "text" },
+    { id: 15, label: "7",                     category: "integer" },
+    { id: 16, label: "1999.50",               category: "decimal" },
+    { id: 17, label: "Rio de Janeiro",        category: "text" },
+    { id: 18, label: "42",                    category: "integer" },
+    { id: 19, label: "Brasil",                category: "text" },
+    { id: 20, label: "Dr. Souza",             category: "text" }
+  ];
+
+  // ===== Cores/estilo dos cartões por "cara" (apenas estético, não revela a resposta) =====
+  const CARD_STYLE = {
+    text:    { cls: "bg-white border-slate-200 text-slate-700",   icon: "🔤" },
+    integer: { cls: "bg-white border-slate-200 text-slate-700",   icon: "🔢" },
+    decimal: { cls: "bg-white border-slate-200 text-slate-700",   icon: "💵" },
+    boolean:{ cls: "bg-white border-slate-200 text-slate-700",   icon: "🚦" }
+  };
+  // Obs.: propositalmente todos com o mesmo estilo neutro, para o usuário pensar pela forma do valor.
+
+  const messArea = document.getElementById("messArea");
+  const messEmpty = document.getElementById("messEmpty");
+  const progressBar = document.getElementById("progressBar");
+  const progressCount = document.getElementById("progressCount");
+  const modal = document.getElementById("modal");
+  const toast = document.getElementById("toast");
+  const restartBtn = document.getElementById("restartBtn");
+
+  let sortedCount = 0;
+  let activeDrag = null; // { card, offsetX, offsetY, originParent, originNext, width, height }
+
+  // ===== Construção inicial =====
+  function buildItems() {
+    // Embaralha ordem para parecer "bagunça"
+    const shuffled = ITEMS.slice().sort(() => Math.random() - 0.5);
+    shuffled.forEach((it, i) => {
+      const card = document.createElement("div");
+      const st = CARD_STYLE[it.category];
+      card.className = `item-card select-none ${st.cls} border rounded-xl px-3 py-2 shadow-sm font-bold text-sm sm:text-base flex items-center gap-2`;
+      card.style.setProperty('--rot', `${(Math.random() * 6 - 3).toFixed(2)}deg`);
+      card.style.transform = `rotate(${card.style.getPropertyValue('--rot')})`;
+      card.classList.add('float-bob');
+      card.style.animationDelay = `${(i * 0.2).toFixed(2)}s`;
+      card.dataset.id = it.id;
+      card.dataset.category = it.category;
+      card.innerHTML = `<span class="opacity-60 text-xs">${st.icon}</span><span>${escapeHtml(it.label)}</span>`;
+      attachDrag(card);
+      messArea.appendChild(card);
+    });
+    updateProgress();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  // ===== Drag and Drop com Pointer Events (mouse + touch) =====
+  function attachDrag(card) {
+    card.addEventListener("pointerdown", onPointerDown);
+  }
+
+  function onPointerDown(e) {
+    const card = e.currentTarget;
+    if (card.classList.contains("locked")) return; // já resolvido
+    if (e.button !== undefined && e.button !== 0) return; // só botão esquerdo
+
+    e.preventDefault();
+    card.setPointerCapture(e.pointerId);
+
+    const rect = card.getBoundingClientRect();
+    activeDrag = {
+      card,
+      pointerId: e.pointerId,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      originParent: card.parentNode,
+      originNext: card.nextSibling
+    };
+
+    // Fixa o tamanho enquanto arrasta (evita "pulo" de layout)
+    card.style.width = rect.width + "px";
+    card.style.height = rect.height + "px";
+    card.classList.add("dragging");
+    card.classList.remove("float-bob");
+    card.style.transform = "scale(1.08) rotate(-3deg)";
+
+    moveCardTo(e.clientX, e.clientY);
+
+    card.addEventListener("pointermove", onPointerMove);
+    card.addEventListener("pointerup", onPointerUp);
+    card.addEventListener("pointercancel", onPointerUp);
+  }
+
+  function moveCardTo(x, y) {
+    if (!activeDrag) return;
+    const { card, offsetX, offsetY } = activeDrag;
+    card.style.left = (x - offsetX) + "px";
+    card.style.top = (y - offsetY) + "px";
+  }
+
+  function onPointerMove(e) {
+    if (!activeDrag) return;
+    moveCardTo(e.clientX, e.clientY);
+
+    // Detecta zona sob o cursor
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    document.querySelectorAll(".drop-zone").forEach(z => z.classList.remove("hover"));
+    const zone = el ? el.closest(".drop-zone") : null;
+    if (zone) zone.classList.add("hover");
+  }
+
+  function onPointerUp(e) {
+    if (!activeDrag) return;
+    const { card, originParent, originNext } = activeDrag;
+
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const zone = el ? el.closest(".drop-zone") : null;
+
+    // Limpa listeners
+    card.removeEventListener("pointermove", onPointerMove);
+    card.removeEventListener("pointerup", onPointerUp);
+    card.removeEventListener("pointercancel", onPointerUp);
+    try { card.releasePointerCapture(e.pointerId); } catch (_) {}
+    document.querySelectorAll(".drop-zone").forEach(z => z.classList.remove("hover"));
+
+    // Restaura estilos de drag
+    card.classList.remove("dragging");
+    card.style.left = "";
+    card.style.top = "";
+    card.style.width = "";
+    card.style.height = "";
+
+    if (zone) {
+      const targetCat = zone.dataset.category;
+      const itemCat = card.dataset.category;
+      if (targetCat === itemCat) {
+        // ACERTOU
+        placeIntoBox(card, zone);
+        card.classList.add("locked");
+        card.style.transform = ""; // remove rotação
+        sortedCount++;
+        updateProgress();
+        if (sortedCount === ITEMS.length) {
+          setTimeout(showCompletion, 450);
+        }
+      } else {
+        // ERROU: shake e volta
+        returnToOrigin(card, originParent, originNext, true);
+        showToast();
+      }
+    } else {
+      // Solto fora de qualquer caixa: volta sem shake
+      returnToOrigin(card, originParent, originNext, false);
+    }
+    activeDrag = null;
+  }
+
+  function placeIntoBox(card, zone) {
+    const content = zone.querySelector(".drop-content");
+    content.appendChild(card);
+  }
+
+  function returnToOrigin(card, parent, nextSibling, withShake) {
+    // Reinsere na posição original
+    if (nextSibling && nextSibling.parentNode === parent) {
+      parent.insertBefore(card, nextSibling);
+    } else {
+      parent.appendChild(card);
+    }
+    if (withShake) {
+      card.classList.add("shake");
+      // Restaura rotação leve e flutuação depois do shake
+      setTimeout(() => {
+        card.classList.remove("shake");
+        const rot = card.style.getPropertyValue('--rot') || "0deg";
+        card.style.transform = `rotate(${rot})`;
+        card.classList.add("float-bob");
+      }, 470);
+    } else {
+      const rot = card.style.getPropertyValue('--rot') || "0deg";
+      card.style.transform = `rotate(${rot})`;
+      card.classList.add("float-bob");
+    }
+  }
+
+  // ===== Progresso / Conclusão =====
+  function updateProgress() {
+    progressCount.textContent = sortedCount;
+    const pct = (sortedCount / ITEMS.length) * 100;
+    progressBar.style.width = pct + "%";
+    // Mostra mensagem "tudo no lugar" quando a bagunça fica vazia
+    const hasItems = messArea.querySelector(".item-card");
+    messEmpty.classList.toggle("hidden", !!hasItems);
+  }
+
+  function showCompletion() {
+    modal.classList.remove("hidden");
+    launchConfetti();
+  }
+
+  function showToast() {
+    toast.style.opacity = "1";
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => { toast.style.opacity = "0"; }, 1600);
+  }
+
+  function launchConfetti() {
+    const colors = ["#6366f1", "#22c55e", "#f59e0b", "#ec4899", "#06b6d4", "#a855f7"];
+    const count = 70;
+    for (let i = 0; i < count; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = (Math.random() * 100) + "vw";
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.animationDuration = (2 + Math.random() * 2.2).toFixed(2) + "s";
+      c.style.animationDelay = (Math.random() * 0.6).toFixed(2) + "s";
+      c.style.transform = `rotate(${Math.random() * 360}deg)`;
+      if (Math.random() > 0.5) c.style.borderRadius = "50%";
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 5000);
+    }
+  }
+
+  function resetGame() {
+    // Remove cartões antigos
+    document.querySelectorAll(".item-card").forEach(c => c.remove());
+    sortedCount = 0;
+    modal.classList.add("hidden");
+    buildItems();
+  }
+
+  restartBtn.addEventListener("click", resetGame);
+
+  // Inicia
+  buildItems();
+})();
+</script>
+</body>
+</html>
